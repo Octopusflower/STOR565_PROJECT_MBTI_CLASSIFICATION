@@ -1,0 +1,121 @@
+---
+title: "Modeling"
+output:
+  html_document:
+    df_print: paged
+date: "2022-11-07"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+library(tidyverse)
+library(ISLR)
+library(rpart)
+library(rpart.plot)
+library(knitr)
+library(e1071)
+library(caTools)
+library(ggplot2)
+library(dplyr)
+library(naivebayes)
+library(randomForest)
+library(verification)
+library(prediction)
+library(ROCR)
+library(pROC)
+```
+
+Import the cleaned and orgnized data:
+```{r}
+dataset = read.csv(file = 'mbti500_sentiment.csv')
+dataset$EorI <- as.factor(dataset$EorI)
+dataset$NorS <- as.factor(dataset$NorS)
+dataset$TorF <- as.factor(dataset$TorF)
+dataset$JorP <- as.factor(dataset$JorP)
+dataset$type <- as.factor(dataset$type)
+head(dataset)
+
+dataset1 = read.csv(file = 'mbti_orgnized.csv')
+dataset1$EorI <- as.factor(dataset1$EorI)
+dataset1$NorS <- as.factor(dataset1$NorS)
+dataset1$TorF <- as.factor(dataset1$TorF)
+dataset1$JorP <- as.factor(dataset1$JorP)
+dataset1$type <- as.factor(dataset1$type)
+head(dataset1)
+```
+EDA:
+```{r}
+dat1 = dataset %>% 
+  group_by(type) %>% 
+  summarize(frequency = n())
+
+dat2 = dataset1 %>% 
+  group_by(type) %>% 
+  summarize(frequency = n())
+dat1$dataset = "mbti500"
+dat2$dataset = "mbti1"
+
+
+dat = rbind(dat1, dat2)
+#dat$dataset = as.factor(dat$dataset)
+#dat = merge(dat1, dat2, by='type')
+head(dat)
+
+compare_plot = ggplot(data = dat, aes(x = type, y=frequency)) +
+  geom_bar(aes(color = dataset, fill = dataset), stat = "identity", position = "dodge2", width = 0.7)
+print(compare_plot+labs(title = "mbti1 & mbti500 data size comparison"))
+```
+
+```{r}
+ggplot(dataset, aes(Sentiment, colour = EorI)) +
+  geom_freqpoly(binwidth = 1) + labs(title="Sentiment Distribution by Outcome")
+```
+First thing to do, we need to split the whole data into training and testing:
+```{r}
+set.seed(123)
+a = seq(1,nrow(dataset),by=1)
+inTrain <- sample(a,nrow(dataset)*0.8, replace=FALSE) 
+training <- dataset[inTrain,]
+testing <- dataset[-inTrain,]
+```
+
+We will try multi-classification of these 16 types of personalities.
+Using naive bayes:
+```{r}
+classifier_NB <- naiveBayes(type ~ Sentiment, data = training, usekernel = T)
+y_pred_NB <- predict(classifier_NB, newdata = testing)
+cm_NB <- table(testing$type, y_pred_NB)
+cm_NB
+confusionMatrix(cm_NB)
+```
+
+Using random forest:
+```{r}
+classifier_RF <- randomForest(type ~ Sentiment, data = training,importance=TRUE)
+y_pred_RF = predict(classifier_RF, newdata = testing)
+cm_RF <- table(testing$type, y_pred_RF)
+cm_RF
+confusionMatrix(cm_RF)
+```
+Using SVM:
+```{r}
+classifier_SVM <- svm(type~ Sentiment, data=training, 
+          method="C-classification", kernal="radial", 
+          gamma=0.1, cost=10)
+y_pred_SVM = predict(classifier_SVM, newdata = testing)
+cm_SVM <- table(testing$type, y_pred_SVM)
+cm_SVM
+confusionMatrix(cm_SVM)
+```
+
+
+Overall Comparison:
+```{r}
+err.all = c(0.1488, 0.2501, 0.2346, 0.7205)
+barplot(err.all, xlab="Models", ylab="Test Accurcy", names=c("Naive Bayes", "Random Forest", "SVM", "LSTM"), col=c("coral1","coral2", "coral3", "coral4"), main = "Multi-Classification model accuracy")
+text((err.all),labels=round(err.all,digits=3),pos=1)
+```
+
+
+

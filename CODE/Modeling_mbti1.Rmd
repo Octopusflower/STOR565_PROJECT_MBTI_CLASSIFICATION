@@ -1,0 +1,490 @@
+---
+title: "Modeling"
+output:
+  html_document:
+    df_print: paged
+date: "2022-11-07"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+library(tidyverse)
+library(ISLR)
+library(rpart)
+library(rpart.plot)
+library(knitr)
+library(e1071)
+library(caTools)
+library(ggplot2)
+library(dplyr)
+library(naivebayes)
+library(randomForest)
+library(verification)
+library(prediction)
+library(ROCR)
+library(pROC)
+library(ggpubr)
+library(class)
+```
+
+Import the cleaned and orgnized data:
+```{r}
+dataset = read.csv(file = 'mbti_orgnized.csv')
+dataset$EorI <- as.factor(dataset$EorI)
+dataset$NorS <- as.factor(dataset$NorS)
+dataset$TorF <- as.factor(dataset$TorF)
+dataset$JorP <- as.factor(dataset$JorP)
+dataset$type <- as.factor(dataset$type)
+head(dataset)
+```
+EDA:
+```{r}
+dim(dataset)
+#From the dataset, we can see that there are in total 8675 observations and 17 dimensions. Within the 17 dimensions, we will mainly use the latter 10 variables to do the classification modeling.
+summary(dataset)
+ggplot(data = dataset) +
+  geom_bar(mapping = aes(x = type))
+```
+#From the plot we can see that INFJ, INFP, INTP, and INTJ are the major components of the sample. Also, it is noteworthy that we have very little data about ESFJ, ESFP, ESTJ, ESTP. This is an interesting phenomenon since it implies that people with IN personality might be more active online while people with ES personality might be the least active online(because the data is collected from an online forum.)
+
+```{r}
+#EDA Question 1: Does extrovert people overall speak more than introvert people?
+ggplot(data=dataset, aes(x=avg_comment_length,fill = EorI)) + 
+  geom_histogram() + ggtitle("Average Comment Length for Extrovert People and Introvert People")+
+  labs(fill = "Introvert(0) or Extrovert(1)")
+
+
+dataset %>% group_by(EorI) %>% 
+  summarize(
+    count = mean(avg_comment_length)
+  )
+```
+
+#From the summary table, we conclude that the average comment length for extrovert people is 24.5887, which is pretty close to introvert people's 24.5057. In other words, there is no significant difference in the average comment length between extrovert people and introvert people.
+
+```{r}
+#Question2: Will extrovert people have more positive feelings(measured by sentiment score)?
+
+ggplot(data=dataset, aes(x=Sentiment,color = EorI)) + 
+  geom_freqpoly()
+
+dataset %>% group_by(EorI) %>% 
+  summarize(
+    count = mean(Sentiment)
+  )
+```
+#According to the result, there is not big difference. We can clearly see from the graph that majority of the Sentiment scores are around 0.95. However, there is a slight difference showing that introvert people's comments have a little bit less positive sentiment score than extrovert people.
+
+```{r}
+#Extroversion or Introversion
+a1<-ggplot(dataset, aes(avg_comment_length, colour = EorI)) +
+  geom_freqpoly(binwidth = 1) 
+
+b1<-ggplot(dataset, aes(comment_length_var, colour = EorI)) +
+  geom_freqpoly(binwidth = 1)   
+
+c1<-ggplot(dataset, aes(Sentiment, colour = EorI)) +
+  geom_freqpoly(binwidth = 1)  
+
+d1<-ggplot(dataset, aes(Ellipses, colour = EorI)) +
+  geom_freqpoly(binwidth = 1)  
+
+e1<-ggplot(dataset, aes(Exclamation, colour = EorI)) +
+  geom_freqpoly(binwidth = 1) 
+
+f1<-ggplot(dataset, aes(Question, colour = EorI)) +
+  geom_freqpoly(binwidth = 1)
+
+g1<-ggplot(dataset, aes(Links, colour = EorI)) +
+  geom_freqpoly(binwidth = 1) 
+
+h1<-ggplot(dataset, aes(Picture, colour = EorI)) +
+  geom_freqpoly(binwidth = 1) 
+
+i1<-ggplot(dataset, aes(Emojies, colour = EorI)) +
+  geom_freqpoly(binwidth = 1) 
+
+j1<-ggplot(dataset, aes(Upper, colour = EorI)) +
+  geom_freqpoly(binwidth = 1)
+```
+
+```{r}
+#Sensing or Intuition
+a2<-ggplot(dataset, aes(avg_comment_length, colour = NorS)) +
+  geom_freqpoly(binwidth = 1) 
+
+b2<-ggplot(dataset, aes(comment_length_var, colour = NorS)) +
+  geom_freqpoly(binwidth = 1)
+
+c2<-ggplot(dataset, aes(Sentiment, colour = NorS)) +
+  geom_freqpoly(binwidth = 1) 
+
+d2<-ggplot(dataset, aes(Ellipses, colour = NorS)) +
+  geom_freqpoly(binwidth = 1) 
+
+e2<-ggplot(dataset, aes(Exclamation, colour = NorS)) +
+  geom_freqpoly(binwidth = 1) 
+
+f2<-ggplot(dataset, aes(Question, colour = NorS)) +
+  geom_freqpoly(binwidth = 1)
+
+g2<-ggplot(dataset, aes(Links, colour = NorS)) +
+  geom_freqpoly(binwidth = 1) 
+
+h2<-ggplot(dataset, aes(Picture, colour = NorS)) +
+  geom_freqpoly(binwidth = 1) 
+
+i2<-ggplot(dataset, aes(Emojies, colour = NorS)) +
+  geom_freqpoly(binwidth = 1)
+
+j2<-ggplot(dataset, aes(Upper, colour = NorS)) +
+  geom_freqpoly(binwidth = 1) 
+```
+
+```{r}
+#Thinking or Feeling
+a3<-ggplot(dataset, aes(avg_comment_length, colour = TorF)) +
+  geom_freqpoly(binwidth = 1)
+
+b3<-ggplot(dataset, aes(comment_length_var, colour = TorF)) +
+  geom_freqpoly(binwidth = 1) 
+
+c3<-ggplot(dataset, aes(Sentiment, colour = TorF)) +
+  geom_freqpoly(binwidth = 1)
+
+d3<-ggplot(dataset, aes(Ellipses, colour = TorF)) +
+  geom_freqpoly(binwidth = 1)
+e3<-ggplot(dataset, aes(Exclamation, colour = TorF)) +
+  geom_freqpoly(binwidth = 1)  
+
+f3<-ggplot(dataset, aes(Question, colour = TorF)) +
+  geom_freqpoly(binwidth = 1)  
+
+g3<-ggplot(dataset, aes(Links, colour = TorF)) +
+  geom_freqpoly(binwidth = 1)  
+
+h3<-ggplot(dataset, aes(Picture, colour = TorF)) +
+  geom_freqpoly(binwidth = 1)  
+
+i3<-ggplot(dataset, aes(Emojies, colour = TorF)) +
+  geom_freqpoly(binwidth = 1)   
+
+j3<-ggplot(dataset, aes(Upper, colour = TorF)) +
+  geom_freqpoly(binwidth = 1) + labs(title="Upper Distribution by Outcome")
+```
+
+```{r}
+#Judging or Perceiving
+a4<-ggplot(dataset, aes(avg_comment_length, colour = JorP)) +
+  geom_freqpoly(binwidth = 1)
+
+b4<-ggplot(dataset, aes(comment_length_var, colour = JorP)) +
+  geom_freqpoly(binwidth = 1)   
+
+c4<-ggplot(dataset, aes(Sentiment, colour = JorP)) +
+  geom_freqpoly(binwidth = 1)  
+
+d4<-ggplot(dataset, aes(Ellipses, colour = JorP)) +
+  geom_freqpoly(binwidth = 1)  
+
+e4<-ggplot(dataset, aes(Exclamation, colour = JorP)) +
+  geom_freqpoly(binwidth = 1)  
+
+f4<-ggplot(dataset, aes(Question, colour = JorP)) +
+  geom_freqpoly(binwidth = 1)  
+
+g4<-ggplot(dataset, aes(Links, colour = JorP)) +
+  geom_freqpoly(binwidth = 1)  
+
+h4<-ggplot(dataset, aes(Picture, colour = JorP)) +
+  geom_freqpoly(binwidth = 1)  
+
+i4<-ggplot(dataset, aes(Emojies, colour = JorP)) +
+  geom_freqpoly(binwidth = 1)   
+
+j4<-ggplot(dataset, aes(Upper, colour = JorP)) +
+  geom_freqpoly(binwidth = 1) + labs(title="Upper Distribution by Outcome")
+```
+
+
+```{r}
+avg_comment_length <- ggarrange(a1,a2,a3,a4, 
+                    ncol = 2, nrow = 2)
+annotate_figure(avg_comment_length, top = text_grob("Average Comment Length Distribution by Outcome", color = "red", face = "bold", size = 13))
+```
+
+
+```{r}
+comment_length_var <- ggarrange(b1,b2,b3,b4, 
+                    ncol = 2, nrow = 2)
+annotate_figure(comment_length_var, top = text_grob("Comment Length Variance Distribution by Outcome", color = "red", face = "bold", size = 13))
+```
+
+
+```{r}
+Sentiment <- ggarrange(c1,c2,c3,c4, 
+                    ncol = 2, nrow = 2)
+annotate_figure(Sentiment, top = text_grob("Sentiment Distribution by Outcome", color = "red", face = "bold", size = 13))
+```
+
+```{r}
+Ellipses <- ggarrange(d1,d2,d3,d4, 
+                    ncol = 2, nrow = 2)
+annotate_figure(Ellipses, top = text_grob("Ellipses Distribution by Outcome", color = "red", face = "bold", size = 13))
+```
+
+```{r}
+Exclamation <- ggarrange(e1,e2,e3,e4, 
+                    ncol = 2, nrow = 2)
+annotate_figure(Exclamation, top = text_grob("Exclamation Distribution by Outcome", color = "red", face = "bold", size = 13))
+```
+
+```{r}
+Question  <- ggarrange(f1,f2,f3,f4, 
+                    ncol = 2, nrow = 2)
+annotate_figure(Question , top = text_grob("Question  Distribution by Outcome", color = "red", face = "bold", size = 13))
+```
+
+```{r}
+Links  <- ggarrange(g1,g2,g3,g4, 
+                    ncol = 2, nrow = 2)
+annotate_figure(Links , top = text_grob("Links  Distribution by Outcome", color = "red", face = "bold", size = 13))
+```
+
+```{r}
+Picture <- ggarrange(h1,h2,h3,h4, 
+                    ncol = 2, nrow = 2)
+annotate_figure(Picture , top = text_grob("Picture  Distribution by Outcome", color = "red", face = "bold", size = 13))
+```
+
+```{r}
+Emojies <- ggarrange(i1,i2,i3,i4, 
+                    ncol = 2, nrow = 2)
+annotate_figure(Emojies, top = text_grob("Emojies Distribution by Outcome", color = "red", face = "bold", size = 13))
+```
+
+```{r}
+Upper <- ggarrange(j1,j2,j3,j4, 
+                    ncol = 2, nrow = 2)
+annotate_figure(Upper, top = text_grob("Upper Distribution by Outcome", color = "red", face = "bold", size = 13))
+```
+First thing to do, we need to split the whole data into training and testing:
+```{r}
+set.seed(123)
+a = seq(1,nrow(dataset),by=1)
+inTrain <- sample(a,nrow(dataset)*0.8, replace=FALSE) 
+training <- dataset[inTrain,]
+testing <- dataset[-inTrain,]
+```
+
+First of all, we will try multi-classification of these 16 types of personalities.
+Using naive bayes:
+```{r}
+classifier_NB <- naiveBayes(type ~ avg_comment_length + comment_length_var + Sentiment + Ellipses + Exclamation + Question + Links + Picture + Emojies + Upper, data = training, usekernel = T)
+y_pred_NB <- predict(classifier_NB, newdata = testing)
+cm_NB <- table(testing$type, y_pred_NB)
+cm_NB
+confusionMatrix(cm_NB)
+```
+
+Using random forest:
+```{r}
+classifier_RF <- randomForest(type ~ avg_comment_length + comment_length_var + Sentiment + Ellipses + Exclamation + Question + Links + Picture + Emojies + Upper, data = training,importance=TRUE)
+y_pred_RF = predict(classifier_RF, newdata = testing)
+cm_RF <- table(testing$type, y_pred_RF)
+cm_RF
+confusionMatrix(cm_RF)
+```
+Using SVM:
+```{r}
+classifier_SVM <- svm(type~avg_comment_length + comment_length_var + Sentiment + Ellipses + Exclamation + Question + Links + Picture + Emojies + Upper, data=training, 
+          method="C-classification", kernal="radial", 
+          gamma=0.1, cost=10)
+y_pred_SVM = predict(classifier_SVM, newdata = testing)
+cm_SVM <- table(testing$type, y_pred_SVM)
+cm_SVM
+confusionMatrix(cm_SVM)
+```
+
+Overall Comparison:
+```{r}
+err.all = c(0.1331, 0.215, 0.2444)
+barplot(err.all, xlab="Models", ylab="Test Accurcy", names=c("Naive Bayes", "Random Forest", "SVM"), col=c("lightblue1","lightblue2", "lightblue3"), main = "Multi-Classification model accuracy")
+text((err.all),labels=round(err.all,digits=3),pos=1)
+```
+
+Instead of using 16 labels to do the modeling, since all dimensions like Extroversion and Introversion are independent to each other, we can seperate this problem into 4 individual binary classification problems and do the modeling. 
+
+(i) Extroversion or Introversion Classification
+Using Naive Bayes:
+```{r}
+classifier_EorI_NB <- naiveBayes(EorI ~ avg_comment_length + comment_length_var + Sentiment + Ellipses + Exclamation + Question + Links + Picture + Emojies + Upper, data = training, usekernel = T)
+```
+```{r}
+y_pred_EorI_NB <- predict(classifier_EorI_NB, newdata = testing)
+cm_EorI_NB <- table(testing$EorI, y_pred_EorI_NB)
+cm_EorI_NB
+confusionMatrix(cm_EorI_NB)
+```
+
+Using SVM:
+```{r}
+classifier_EorI_SVM <- svm(EorI ~ avg_comment_length + comment_length_var + Sentiment + Ellipses + Exclamation + Question + Links + Picture + Emojies + Upper, data = training, type = "C-classification", kernel = "linear")
+```
+
+```{r}
+y_pred_EorI_SVM = predict(classifier_EorI_SVM, newdata = testing)
+cm_EorI_SVM <- table(testing$EorI, y_pred_EorI_SVM)
+cm_EorI_SVM
+confusionMatrix(cm_EorI_SVM)
+```
+
+Using Random Forest:
+```{r}
+classifier_EorI_RF <- randomForest(EorI ~ avg_comment_length + comment_length_var + Sentiment + Ellipses + Exclamation + Question + Links + Picture + Emojies + Upper, data = training, importance = T, proximity = T)
+```
+```{r}
+y_pred_EorI_RF = predict(classifier_EorI_RF, newdata = testing)
+cm_EorI_RF <- table(testing$EorI, y_pred_EorI_RF)
+cm_EorI_RF
+confusionMatrix(cm_EorI_RF)
+```
+
+Comparison:
+```{r}
+err.all = c(0.7441, 0.7752, 0.7683)
+barplot(err.all, xlab="Models", ylab="Test Accurcy", names=c("Naive Bayes", "SVM", "Random Forest"),col = c("lightblue1", "lightblue2", "lightblue3"), main = "EorI Classification model accuracy")
+text((err.all),labels=round(err.all,digits=3),pos=1)
+```
+
+
+(ii) Sensing or Intuition Classification
+Using Naive Bayes:
+```{r}
+classifier_NorS_NB <- naiveBayes(NorS ~ avg_comment_length + comment_length_var + Sentiment + Ellipses + Exclamation + Question + Links + Picture + Emojies + Upper, data = training, usekernel = T)
+```
+```{r}
+y_pred_NorS_NB <- predict(classifier_NorS_NB, newdata = testing)
+cm_NorS_NB <- table(testing$NorS, y_pred_NorS_NB)
+cm_NorS_NB
+confusionMatrix(cm_NorS_NB)
+```
+
+Using SVM:
+```{r}
+classifier_NorS_SVM <- svm(NorS ~ avg_comment_length + comment_length_var + Sentiment + Ellipses + Exclamation + Question + Links + Picture + Emojies + Upper, data = training, type = "C-classification", kernel = "linear")
+```
+```{r}
+y_pred_NorS_SVM = predict(classifier_NorS_SVM, newdata = testing)
+cm_NorS_SVM <- table(testing$NorS, y_pred_NorS_SVM)
+cm_NorS_SVM
+confusionMatrix(cm_NorS_SVM)
+```
+
+Using Random Forest:
+```{r}
+classifier_NorS_RF <- randomForest(NorS ~ avg_comment_length + comment_length_var + Sentiment + Ellipses + Exclamation + Question + Links + Picture + Emojies + Upper, data = training, importance = T, proximity = T)
+```
+```{r}
+y_pred_NorS_RF = predict(classifier_NorS_RF, newdata = testing)
+cm_NorS_RF <- table(testing$NorS, y_pred_NorS_RF)
+cm_NorS_RF
+confusionMatrix(cm_NorS_RF)
+
+```
+
+Comparison:
+```{r}
+err.all = c(0.8386, 0.8646, 0.864)
+barplot(err.all, xlab="Models", ylab="Test Accurcy", names=c("Naive Bayes", "SVM", "Random Forest"),col=c("lightblue1","lightblue2", "lightblue3"), main = "NorS Classification model accuracy")
+text((err.all),labels=round(err.all,digits=3),pos=1)
+```
+
+(iii) Thinking or Feeling Classification
+Using Naive Bayes:
+```{r}
+classifier_TorF_NB <- naiveBayes(TorF ~ avg_comment_length + comment_length_var + Sentiment + Ellipses + Exclamation + Question + Links + Picture + Emojies + Upper, data = training, usekernel = T)
+```
+```{r}
+y_pred_TorF_NB <- predict(classifier_TorF_NB, newdata = testing)
+cm_TorF_NB <- table(testing$TorF, y_pred_TorF_NB)
+cm_TorF_NB
+confusionMatrix(cm_TorF_NB)
+```
+
+
+Using SVM:
+```{r}
+classifier_TorF_SVM <- svm(TorF ~ avg_comment_length + comment_length_var + Sentiment + Ellipses + Exclamation + Question + Links + Picture + Emojies + Upper, data = training, type = "C-classification", kernel = "linear")
+```
+
+```{r}
+y_pred_TorF_SVM = predict(classifier_TorF_SVM, newdata = testing)
+cm_TorF_SVM <- table(testing$TorF, y_pred_TorF_SVM)
+cm_TorF_SVM
+confusionMatrix(cm_TorF_SVM)
+```
+
+Using Random Forest:
+```{r}
+classifier_TorF_RF <- randomForest(TorF ~ avg_comment_length + comment_length_var + Sentiment + Ellipses + Exclamation + Question + Links + Picture + Emojies + Upper, data = training, importance = T, proximity = T)
+```
+```{r}
+y_pred_TorF_RF = predict(classifier_TorF_RF, newdata = testing)
+cm_TorF_RF <- table(testing$TorF, y_pred_TorF_RF)
+cm_TorF_RF
+confusionMatrix(cm_TorF_RF)
+```
+
+Comparison:
+```{r}
+err.all = c(0.611, 0.6427, 0.6524)
+barplot(err.all, xlab="Models", ylab="Test Accurcy", names=c("Naive Bayes", "SVM", "Random Forest"),col=c("lightblue1","lightblue2", "lightblue3"), main = "TorF Classification model accuracy")
+text((err.all),labels=round(err.all,digits=3),pos=1)
+```
+
+
+(iv) Judging and Perceiving Classification
+
+Using Naive Bayes:
+```{r}
+classifier_JorP_NB <- naiveBayes(JorP ~ avg_comment_length + comment_length_var + Sentiment + Ellipses + Exclamation + Question + Links + Picture + Emojies + Upper, data = training, usekernel = T)
+```
+```{r}
+y_pred_JorP_NB <- predict(classifier_JorP_NB, newdata = testing)
+cm_JorP_NB <- table(testing$JorP, y_pred_JorP_NB)
+cm_JorP_NB
+confusionMatrix(cm_JorP_NB)
+```
+
+Using SVM:
+```{r}
+classifier_JorP_SVM <- svm(JorP ~ avg_comment_length + comment_length_var + Sentiment + Ellipses + Exclamation + Question + Links + Picture + Emojies + Upper, data = training, type = "C-classification", kernel = "linear")
+```
+
+```{r}
+y_pred_JorP_SVM = predict(classifier_JorP_SVM, newdata = testing)
+cm_JorP_SVM <- table(testing$JorP, y_pred_JorP_SVM)
+cm_JorP_SVM
+confusionMatrix(cm_JorP_SVM)
+```
+
+Using Random Forest:
+```{r}
+classifier_JorP_RF <- randomForest(JorP ~ avg_comment_length + comment_length_var + Sentiment + Ellipses + Exclamation + Question + Links + Picture + Emojies + Upper, data = training, importance = T, proximity = T)
+```
+```{r}
+y_pred_JorP_RF = predict(classifier_JorP_RF, newdata = testing)
+cm_JorP_RF <- table(testing$JorP, y_pred_JorP_RF)
+cm_JorP_RF
+confusionMatrix(cm_JorP_RF)
+```
+
+
+Comparison:
+```{r}
+err.all = c(0.5159, 0.6081, 0.5914)
+barplot(err.all, xlab="Models", ylab="Test Accurcy", names=c("Naive Bayes", "SVM", "Random Forest"),col=c("lightblue1","lightblue2", "lightblue3"), main = "JorP Classification model accuracy")
+text((err.all),labels=round(err.all,digits=3),pos=1)
+```
